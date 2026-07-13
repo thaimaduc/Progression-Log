@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Urge Log</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app">
+    <header>
+      <p class="date" id="date"></p>
+      <p class="lead">Felt an urge?</p>
+    </header>
+
+    <div class="habits" id="habits"></div>
+    <div class="no-habit-hint" id="noHabitHint" style="display:none;">
+      Add an urge type above to start logging
+    </div>
+
+    <div class="buttons">
+      <button class="log-btn pass" id="passBtn" onclick="logEntry('pass')" disabled>
+        Let it pass
+        <small>noticed it, didn't act</small>
+      </button>
+      <button class="log-btn gave" id="gaveBtn" onclick="logEntry('gave')" disabled>
+        Gave in
+        <small>just a fact, not a verdict</small>
+      </button>
+    </div>
+
+    <div class="triggers" id="triggers">
+      <p>What was going on? (optional)</p>
+      <div class="chips">
+        <button class="chip" onclick="setTrigger('tired')">tired</button>
+        <button class="chip" onclick="setTrigger('late work')">late work</button>
+        <button class="chip" onclick="setTrigger('bored')">bored</button>
+        <button class="chip" onclick="setTrigger('stressed')">stressed</button>
+        <button class="chip" onclick="setTrigger('social')">social</button>
+      </div>
+    </div>
+
+    <div class="tally">
+      <div class="tally-header" id="tallyHeader">This week</div>
+      <div id="tallyBody"></div>
+    </div>
+
+    <div class="entries" id="entries"></div>
+  </div>
+
+  <div class="toast" id="toast">
+    <span id="toastMsg">logged</span>
+    <button class="undo" id="undoBtn" onclick="undoLast()">undo</button>
+  </div>
+
+  <div class="modal-overlay" id="modalOverlay">
+    <div class="modal">
+      <h3 id="modalTitle">Name this urge</h3>
+      <p id="modalSub">Keep it simple — you'll tap it next time.</p>
+      <input type="text" id="habitInput" placeholder="e.g. smoking, sugar, doomscrolling" maxlength="24">
+      <div class="modal-actions">
+        <button class="modal-btn cancel" onclick="closeModal()">Cancel</button>
+        <button class="modal-btn confirm" onclick="confirmModal()">Save</button>
+      </div>
+    </div>
+  </div>
+
+<script src="script.js"></script>
+</body>
+</html>
