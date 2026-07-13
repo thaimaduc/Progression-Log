@@ -1,6 +1,6 @@
 {
-  "name": "Urge log",
-  "short_name": "Urge log",
+  "name": "Progression Log",
+  "short_name": "Progression Log",
   "description": "A calm place to notice urges. No streaks, no scores.",
   "start_url": "./",
   "scope": "./",
