@@ -1,0 +1,147 @@
+/* ---- calm, low-stimulation palette (chosen on purpose: this is an
+         anti-compulsion tool, so nothing here celebrates or alarms).
+         Sage vs stone keeps the two buttons DISTINCT but EQUAL — neither
+         is louder, so "gave in" reads as a fact, never a red alarm. ---- */
+:root {
+  --paper:    #ECEEE9;   /* page background */
+  --surface:  #F7F8F4;   /* cards */
+  --ink:      #2B2E2A;   /* main text */
+  --muted:    #767B72;   /* secondary text */
+  --hair:      #DBDDD5;   /* thin borders */
+  --sage:     #E4ECE3;   /* "let it pass" fill */
+  --sage-ink: #3C5544;   /* "let it pass" text */
+  --stone:    #E9E7E0;   /* "gave in" fill (deliberately not red) */
+  --stone-ink:#5E5A50;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+  padding: 28px 20px 60px;
+}
+.app { max-width: 440px; margin: 0 auto; }
+
+header { margin-bottom: 24px; }
+.date { font-size: 13px; color: var(--muted); }
+.lead { font-size: 19px; font-weight: 500; margin-top: 3px; }
+
+/* ---- habit chips: labels you switch between, not scoreboards.
+       No numbers, no per-habit color. Tap the active one to rename. ---- */
+.habits { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 22px; min-height: 34px; }
+.habit-chip {
+  background: var(--surface); border: 0.5px solid var(--hair); color: var(--muted);
+  padding: 7px 15px; border-radius: 999px;
+  font-size: 14px; font-weight: 500; cursor: pointer;
+  font-family: inherit; transition: transform 0.08s ease;
+}
+.habit-chip:active { transform: scale(0.96); }
+.habit-chip.selected { background: var(--ink); border-color: var(--ink); color: var(--paper); }
+.habit-chip.add { background: transparent; border: 0.5px dashed var(--hair); color: var(--muted); }
+
+.no-habit-hint {
+  font-size: 12px; color: var(--muted); text-align: center;
+  margin-bottom: 16px; font-style: italic;
+}
+
+/* ---- the two log buttons: sage vs stone, distinct but equal weight ---- */
+.buttons { display: flex; gap: 12px; }
+.log-btn {
+  flex: 1; border: none; border-radius: 16px; padding: 22px 12px;
+  font-size: 15px; font-weight: 500; font-family: inherit;
+  cursor: pointer; text-align: left;
+  transition: transform 0.08s ease, filter 0.15s ease;
+}
+.log-btn:active:not(:disabled) { transform: scale(0.97); }
+.log-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.log-btn small { display: block; font-size: 12px; font-weight: 400; opacity: 0.75; margin-top: 4px; }
+.pass { background: var(--sage);  color: var(--sage-ink); }
+.gave { background: var(--stone); color: var(--stone-ink); }
+
+/* ---- optional trigger row ---- */
+.triggers {
+  margin-top: 14px; padding: 14px;
+  background: var(--surface); border: 0.5px solid var(--hair);
+  border-radius: 14px; display: none;
+}
+.triggers.visible { display: block; }
+.triggers p { font-size: 12px; color: var(--muted); margin-bottom: 10px; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  border: 0.5px solid var(--hair); background: var(--paper); color: var(--muted);
+  border-radius: 13px; padding: 6px 13px;
+  font-size: 13px; font-family: inherit; cursor: pointer;
+  transition: transform 0.08s ease;
+}
+.chip:active { transform: scale(0.96); }
+
+/* ---- tally: ACTIVE habit only. A fact, not a trophy. ---- */
+.tally { margin-top: 30px; padding-bottom: 18px; border-bottom: 0.5px solid var(--hair); }
+.tally-header { font-size: 12px; color: var(--muted); margin-bottom: 12px; }
+.tally-nums { display: flex; gap: 28px; }
+.tally-num { font-size: 26px; font-weight: 500; }
+.tally-cap { font-size: 12px; color: var(--muted); }
+.tally-empty { font-size: 14px; color: var(--muted); font-style: italic; }
+
+/* ---- entries: active habit only. Dots are the SAME calm tone on
+       purpose — a green/grey split would quietly grade you. ---- */
+.entries { margin-top: 8px; }
+.entry {
+  display: flex; align-items: center; gap: 10px;
+  padding: 11px 2px; border-bottom: 0.5px solid var(--hair); font-size: 14px;
+}
+.dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; background: #B9B2A2; }
+.entry .what { flex: 1; }
+.entry .trig { font-size: 12px; color: var(--muted); }
+.entry .time { font-size: 12px; color: var(--muted); }
+
+/* ---- toast with undo ---- */
+.toast {
+  position: fixed; bottom: 24px; left: 50%;
+  transform: translateX(-50%) translateY(10px);
+  background: var(--ink); color: var(--paper);
+  font-size: 13px; padding: 8px 10px 8px 16px; border-radius: 20px;
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  display: flex; align-items: center; gap: 14px;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); pointer-events: auto; }
+.undo {
+  background: none; border: none; color: #9DBBA6;
+  font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; padding: 2px 4px;
+}
+
+/* ---- modal (add + rename share it) ---- */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(43,46,42,0.28);
+  display: none; align-items: center; justify-content: center; z-index: 100; padding: 16px;
+}
+.modal-overlay.visible { display: flex; }
+.modal { background: var(--surface); border-radius: 20px; padding: 24px; width: 100%; max-width: 340px; }
+.modal h3 { font-size: 17px; font-weight: 600; margin-bottom: 6px; color: var(--ink); }
+.modal p { font-size: 13px; color: var(--muted); margin-bottom: 16px; }
+.modal input {
+  width: 100%; padding: 10px 14px; border: 0.5px solid var(--hair);
+  border-radius: 10px; font-size: 14px; font-family: inherit;
+  margin-bottom: 14px; outline: none; background: var(--paper); color: var(--ink);
+  transition: border-color 0.15s;
+}
+.modal input:focus { border-color: var(--ink); }
+.modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.modal-btn { padding: 8px 16px; border-radius: 8px; border: none; font-family: inherit; font-size: 13px; font-weight: 500; cursor: pointer; }
+.modal-btn.cancel { background: transparent; color: var(--muted); }
+.modal-btn.confirm { background: var(--ink); color: var(--paper); }
+
+/* ---- backup footer: intentionally plain text links, low contrast.
+       A utility you reach for on purpose, never a button that tempts. ---- */
+.backup { margin-top: 34px; text-align: center; }
+.backup-link {
+  background: none; border: none; color: var(--muted);
+  font-family: inherit; font-size: 12px; cursor: pointer;
+  text-decoration: underline; padding: 4px 6px;
+}
+.backup-sep { color: var(--hair); font-size: 12px; }
