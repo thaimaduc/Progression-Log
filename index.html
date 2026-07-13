@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Urge Log</title>
+<!-- PWA: marks the app installable and controls how it looks on the home screen -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#ECEEE9">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+  /* ---- calm, low-stimulation palette (chosen on purpose: this is an
+         anti-compulsion tool, so nothing here celebrates or alarms).
+         Sage vs stone keeps the two buttons DISTINCT but EQUAL — neither
+         is louder, so "gave in" reads as a fact, never a red alarm. ---- */
+  :root {
+    --paper:    #ECEEE9;   /* page background */
+    --surface:  #F7F8F4;   /* cards */
+    --ink:      #2B2E2A;   /* main text */
+    --muted:    #767B72;   /* secondary text */
+    --hair:     #DBDDD5;   /* thin borders */
+    --sage:     #E4ECE3;   /* "let it pass" fill */
+    --sage-ink: #3C5544;   /* "let it pass" text */
+    --stone:    #E9E7E0;   /* "gave in" fill (deliberately not red) */
+    --stone-ink:#5E5A50;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+    padding: 28px 20px 60px;
+  }
+  .app { max-width: 440px; margin: 0 auto; }
+
+  header { margin-bottom: 24px; }
+  .date { font-size: 13px; color: var(--muted); }
+  .lead { font-size: 19px; font-weight: 500; margin-top: 3px; }
+
+  /* ---- habit chips: labels you switch between, not scoreboards.
+         No numbers, no per-habit color. Tap the active one to rename. ---- */
+  .habits { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 22px; min-height: 34px; }
+  .habit-chip {
+    background: var(--surface); border: 0.5px solid var(--hair); color: var(--muted);
+    padding: 7px 15px; border-radius: 999px;
+    font-size: 14px; font-weight: 500; cursor: pointer;
+    font-family: inherit; transition: transform 0.08s ease;
+  }
+  .habit-chip:active { transform: scale(0.96); }
+  .habit-chip.selected { background: var(--ink); border-color: var(--ink); color: var(--paper); }
+  .habit-chip.add { background: transparent; border: 0.5px dashed var(--hair); color: var(--muted); }
+
+  .no-habit-hint {
+    font-size: 12px; color: var(--muted); text-align: center;
+    margin-bottom: 16px; font-style: italic;
+  }
+
+  /* ---- the two log buttons: sage vs stone, distinct but equal weight ---- */
+  .buttons { display: flex; gap: 12px; }
+  .log-btn {
+    flex: 1; border: none; border-radius: 16px; padding: 22px 12px;
+    font-size: 15px; font-weight: 500; font-family: inherit;
+    cursor: pointer; text-align: left;
+    transition: transform 0.08s ease, filter 0.15s ease;
+  }
+  .log-btn:active:not(:disabled) { transform: scale(0.97); }
+  .log-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .log-btn small { display: block; font-size: 12px; font-weight: 400; opacity: 0.75; margin-top: 4px; }
+  .pass { background: var(--sage);  color: var(--sage-ink); }
+  .gave { background: var(--stone); color: var(--stone-ink); }
+
+  /* ---- optional trigger row ---- */
+  .triggers {
+    margin-top: 14px; padding: 14px;
+    background: var(--surface); border: 0.5px solid var(--hair);
+    border-radius: 14px; display: none;
+  }
+  .triggers.visible { display: block; }
+  .triggers p { font-size: 12px; color: var(--muted); margin-bottom: 10px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip {
+    border: 0.5px solid var(--hair); background: var(--paper); color: var(--muted);
+    border-radius: 13px; padding: 6px 13px;
+    font-size: 13px; font-family: inherit; cursor: pointer;
+    transition: transform 0.08s ease;
+  }
+  .chip:active { transform: scale(0.96); }
+
+  /* ---- tally: ACTIVE habit only. A fact, not a trophy. ---- */
+  .tally { margin-top: 30px; padding-bottom: 18px; border-bottom: 0.5px solid var(--hair); }
+  .tally-header { font-size: 12px; color: var(--muted); margin-bottom: 12px; }
+  .tally-nums { display: flex; gap: 28px; }
+  .tally-num { font-size: 26px; font-weight: 500; }
+  .tally-cap { font-size: 12px; color: var(--muted); }
+  .tally-empty { font-size: 14px; color: var(--muted); font-style: italic; }
+
+  /* ---- entries: active habit only. Dots are the SAME calm tone on
+         purpose — a green/grey split would quietly grade you. ---- */
+  .entries { margin-top: 8px; }
+  .entry {
+    display: flex; align-items: center; gap: 10px;
+    padding: 11px 2px; border-bottom: 0.5px solid var(--hair); font-size: 14px;
+  }
+  .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; background: #B9B2A2; }
+  .entry .what { flex: 1; }
+  .entry .trig { font-size: 12px; color: var(--muted); }
+  .entry .time { font-size: 12px; color: var(--muted); }
+
+  /* ---- toast with undo ---- */
+  .toast {
+    position: fixed; bottom: 24px; left: 50%;
+    transform: translateX(-50%) translateY(10px);
+    background: var(--ink); color: var(--paper);
+    font-size: 13px; padding: 8px 10px 8px 16px; border-radius: 20px;
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+    display: flex; align-items: center; gap: 14px;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); pointer-events: auto; }
+  .undo {
+    background: none; border: none; color: #9DBBA6;
+    font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; padding: 2px 4px;
+  }
+
+  /* ---- modal (add + rename share it) ---- */
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(43,46,42,0.28);
+    display: none; align-items: center; justify-content: center; z-index: 100; padding: 16px;
+  }
+  .modal-overlay.visible { display: flex; }
+  .modal { background: var(--surface); border-radius: 20px; padding: 24px; width: 100%; max-width: 340px; }
+  .modal h3 { font-size: 17px; font-weight: 600; margin-bottom: 6px; color: var(--ink); }
+  .modal p { font-size: 13px; color: var(--muted); margin-bottom: 16px; }
+  .modal input {
+    width: 100%; padding: 10px 14px; border: 0.5px solid var(--hair);
+    border-radius: 10px; font-size: 14px; font-family: inherit;
+    margin-bottom: 14px; outline: none; background: var(--paper); color: var(--ink);
+    transition: border-color 0.15s;
+  }
+  .modal input:focus { border-color: var(--ink); }
+  .modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
+  .modal-btn { padding: 8px 16px; border-radius: 8px; border: none; font-family: inherit; font-size: 13px; font-weight: 500; cursor: pointer; }
+  .modal-btn.cancel { background: transparent; color: var(--muted); }
+  .modal-btn.confirm { background: var(--ink); color: var(--paper); }
+
+  /* ---- backup footer: intentionally plain text links, low contrast.
+         A utility you reach for on purpose, never a button that tempts. ---- */
+  .backup { margin-top: 34px; text-align: center; }
+  .backup-link {
+    background: none; border: none; color: var(--muted);
+    font-family: inherit; font-size: 12px; cursor: pointer;
+    text-decoration: underline; padding: 4px 6px;
+  }
+  .backup-sep { color: var(--hair); font-size: 12px; }
+</style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <p class="date" id="date"></p>
+      <p class="lead">Felt an urge?</p>
+    </header>
+
+    <div class="habits" id="habits"></div>
+    <div class="no-habit-hint" id="noHabitHint" style="display:none;">
+      Add an urge type above to start logging
+    </div>
+
+    <div class="buttons">
+      <button class="log-btn pass" id="passBtn" onclick="logEntry('pass')" disabled>
+        Let it pass
+        <small>noticed it, didn't act</small>
+      </button>
+      <button class="log-btn gave" id="gaveBtn" onclick="logEntry('gave')" disabled>
+        Gave in
+        <small>just a fact, not a verdict</small>
+      </button>
+    </div>
+
+    <div class="triggers" id="triggers">
+      <p>What was going on? (optional)</p>
+      <div class="chips">
+        <button class="chip" onclick="setTrigger('tired')">tired</button>
+        <button class="chip" onclick="setTrigger('late work')">late work</button>
+        <button class="chip" onclick="setTrigger('bored')">bored</button>
+        <button class="chip" onclick="setTrigger('stressed')">stressed</button>
+        <button class="chip" onclick="setTrigger('social')">social</button>
+      </div>
+    </div>
+
+    <div class="tally">
+      <div class="tally-header" id="tallyHeader">This week</div>
+      <div id="tallyBody"></div>
+    </div>
+
+    <div class="entries" id="entries"></div>
+
+    <!-- Backup lives at the BOTTOM, quiet, far from the log buttons.
+         It's a rare deliberate action, not part of the core loop. -->
+    <div class="backup">
+      <button class="backup-link" onclick="exportData()">Export backup</button>
+      <span class="backup-sep">·</span>
+      <button class="backup-link" onclick="document.getElementById('importFile').click()">Import backup</button>
+    </div>
+    <!-- hidden: the real file picker the "Import" link triggers -->
+    <input type="file" id="importFile" accept="application/json,.json" style="display:none" onchange="importData(event)">
+  </div>
+
+  <div class="toast" id="toast">
+    <span id="toastMsg">logged</span>
+    <button class="undo" id="undoBtn" onclick="undoLast()">undo</button>
+  </div>
+
+  <div class="modal-overlay" id="modalOverlay">
+    <div class="modal">
+      <h3 id="modalTitle">Name this urge</h3>
+      <p id="modalSub">Keep it simple — you'll tap it next time.</p>
+      <input type="text" id="habitInput" placeholder="e.g. smoking, sugar, doomscrolling" maxlength="24">
+      <div class="modal-actions">
+        <button class="modal-btn cancel" onclick="closeModal()">Cancel</button>
+        <button class="modal-btn confirm" onclick="confirmModal()">Save</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+/* ============================================================
+   DATA MODEL  — the correct spine, kept.
+
+     habits  -> [ {id, name} ]
+     entries -> [ {id, habitId, action, trigger, time} ]
+
+   Entries hold habitId (a POINTER), never the habit's name. Rename a
+   habit -> name changes in ONE place -> every entry still resolves.
+   Counts are DERIVED from entries at draw time. No stored counts.
+   ============================================================ */
+
+let habits   = JSON.parse(localStorage.getItem('habits')  || '[]');
+let entries  = JSON.parse(localStorage.getItem('entries') || '[]');
+let activeId = localStorage.getItem('activeId') || null;
+
+let lastEntryId = null;   // the entry undo can remove
+let pending     = null;   // entry waiting on an optional trigger / auto-commit
+let modalMode   = null;   // 'add' or 'rename' — the modal is shared
+
+function save() {
+  localStorage.setItem('habits',   JSON.stringify(habits));
+  localStorage.setItem('entries',  JSON.stringify(entries));
+  localStorage.setItem('activeId', activeId || '');
+}
+
+/* ============================================================
+   BACKUP: export / import
+
+   WHY THIS EXISTS: localStorage is tied to the exact origin
+   (file:// vs https://yourname.github.io are DIFFERENT origins).
+   Moving the app to hosting, or to another browser/phone, leaves
+   your history stranded at the old origin. This export file is the
+   bridge that carries it across.
+
+   WHAT'S IN THE FILE: ONLY the two real stores — habits and entries.
+   No counts. Counts are always derived from entries, so backing them
+   up would create a second "truth" that could disagree. The entries
+   ARE the record; everything on screen is drawn from them.
+   ============================================================ */
+
+function exportData() {
+  // one tidy object, versioned so a future format change is detectable
+  const backup = {
+    app: 'urge-log',
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    habits: habits,     // [{id, name}]
+    entries: entries    // [{id, habitId, action, trigger, time}]
+  };
+
+  // turn it into a downloadable file entirely in the browser
+  const text = JSON.stringify(backup, null, 2);
+  const blob = new Blob([text], { type: 'application/json' });
+  const url  = URL.createObjectURL(blob);
+
+  // a filename with today's date so multiple backups don't collide
+  const stamp = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'urge-log-backup-' + stamp + '.json';
+  a.click();
+  URL.revokeObjectURL(url);   // let the browser free the temp url
+
+  toastMsg('backup saved');
+}
+
+function importData(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = function () {
+    let data;
+    // 1) parse — a corrupt/non-JSON file must fail SAFELY, touching nothing
+    try {
+      data = JSON.parse(reader.result);
+    } catch (e) {
+      alert('That file isn\'t valid backup data — nothing was changed.');
+      resetImportInput();
+      return;
+    }
+
+    // 2) validate SHAPE before trusting it. We only accept an object
+    //    that actually has the two arrays we expect.
+    if (!data || !Array.isArray(data.habits) || !Array.isArray(data.entries)) {
+      alert('That doesn\'t look like an urge-log backup — nothing was changed.');
+      resetImportInput();
+      return;
+    }
+
+    // 3) ONE confirm — import REPLACES everything. This is the rare,
+    //    deliberate, destructive action that earns a speed bump.
+    const msg = 'Import will REPLACE your current data with:\n\n' +
+                data.habits.length + ' habit(s), ' +
+                data.entries.length + ' entr(y/ies).\n\n' +
+                'Your current data will be overwritten. Continue?';
+    if (!confirm(msg)) { resetImportInput(); return; }
+
+    // 4) commit: swap in the imported stores, then redraw from them
+    habits  = data.habits;
+    entries = data.entries;
+    // pick a sane active habit (first one, or none if empty)
+    activeId = habits.length ? habits[0].id : null;
+    save();
+    renderAll();
+
+    resetImportInput();
+    toastMsg('backup restored');
+  };
+  reader.readAsText(file);
+}
+
+// clear the file input so importing the SAME file twice still fires onchange
+function resetImportInput() {
+  document.getElementById('importFile').value = '';
+}
+function makeId() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+}
+function activeHabit() { return habits.find(h => h.id === activeId) || null; }
+
+/* ---------- habit chips ---------- */
+function renderHabits() {
+  const box = document.getElementById('habits');
+  box.innerHTML = '';
+
+  habits.forEach(h => {
+    const chip = document.createElement('button');
+    chip.className = 'habit-chip' + (h.id === activeId ? ' selected' : '');
+    chip.textContent = h.name;
+    // Tap a non-active chip = switch to it.
+    // Tap the ALREADY-active chip = rename it (via modal).
+    chip.onclick = () => {
+      if (h.id === activeId) openModal('rename');
+      else { activeId = h.id; save(); renderAll(); }
+    };
+    box.appendChild(chip);
+  });
+
+  const add = document.createElement('button');
+  add.className = 'habit-chip add';
+  add.textContent = '+ new';
+  add.onclick = () => openModal('add');
+  box.appendChild(add);
+
+  // buttons only work once a habit is active
+  const ready = activeHabit() !== null;
+  document.getElementById('passBtn').disabled = !ready;
+  document.getElementById('gaveBtn').disabled = !ready;
+  document.getElementById('noHabitHint').style.display = habits.length === 0 ? 'block' : 'none';
+}
+
+/* ---------- modal: shared by add + rename ---------- */
+function openModal(mode) {
+  modalMode = mode;
+  const input = document.getElementById('habitInput');
+  if (mode === 'rename') {
+    document.getElementById('modalTitle').textContent = 'Rename urge';
+    document.getElementById('modalSub').textContent   = 'Past entries stay attached — they point to this by id, not name.';
+    input.value = activeHabit() ? activeHabit().name : '';
+  } else {
+    document.getElementById('modalTitle').textContent = 'Name this urge';
+    document.getElementById('modalSub').textContent   = "Keep it simple — you'll tap it next time.";
+    input.value = '';
+  }
+  document.getElementById('modalOverlay').classList.add('visible');
+  setTimeout(() => input.focus(), 50);
+}
+function closeModal() {
+  document.getElementById('modalOverlay').classList.remove('visible');
+  modalMode = null;
+}
+function confirmModal() {
+  const name = document.getElementById('habitInput').value.trim();
+  if (!name) return;
+
+  if (modalMode === 'rename') {
+    const h = activeHabit();
+    if (h) h.name = name;          // ONLY the name changes; ids/entries untouched
+  } else {
+    const h = { id: makeId(), name: name };
+    habits.push(h);
+    activeId = h.id;               // jump to the new habit
+  }
+  save();
+  closeModal();
+  renderAll();
+}
+
+/* ---------- logging ---------- */
+function logEntry(action) {
+  const h = activeHabit();
+  if (!h) return;
+
+  // build the entry now, but hold it as "pending" so a trigger chip can
+  // attach before it's committed. Auto-commits after 8s if untouched.
+  pending = { id: makeId(), habitId: h.id, action: action, trigger: null, time: Date.now() };
+
+  document.getElementById('triggers').classList.add('visible');
+  clearTimeout(window._commitTimer);
+  window._commitTimer = setTimeout(commit, 8000);
+}
+function setTrigger(word) {
+  if (!pending) return;
+  pending.trigger = word;
+  commit();
+}
+function commit() {
+  clearTimeout(window._commitTimer);
+  if (!pending) return;
+
+  entries.push(pending);
+  lastEntryId = pending.id;       // this is what undo targets
+  pending = null;
+  save();
+
+  document.getElementById('triggers').classList.remove('visible');
+  renderAll();
+  toast(true);                    // show with undo
+}
+
+/* Undo: removes ONLY the just-logged entry, and cancels a pending
+   auto-commit if one is mid-flight. Narrow on purpose — not a delete tool. */
+function undoLast() {
+  clearTimeout(window._commitTimer);
+  if (pending) {                  // logged but not yet committed
+    pending = null;
+    document.getElementById('triggers').classList.remove('visible');
+  } else if (lastEntryId) {       // already committed a moment ago
+    entries = entries.filter(e => e.id !== lastEntryId);
+    lastEntryId = null;
+    save();
+  }
+  document.getElementById('toast').classList.remove('show');
+  renderAll();
+}
+
+/* ---------- tally: ACTIVE habit only, derived from entries ---------- */
+function renderTally() {
+  const h = activeHabit();
+  const body = document.getElementById('tallyBody');
+  document.getElementById('tallyHeader').textContent =
+    h ? 'This week · ' + h.name : 'This week';
+
+  if (!h) { body.innerHTML = '<div class="tally-empty">Add an urge to begin</div>'; return; }
+
+  const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const mine = entries.filter(e => e.habitId === h.id && e.time >= weekAgo);
+  const pass = mine.filter(e => e.action === 'pass').length;
+  const gave = mine.filter(e => e.action === 'gave').length;
+
+  body.innerHTML =
+    '<div class="tally-nums">' +
+      '<div><div class="tally-num">' + pass + '</div><div class="tally-cap">let it pass</div></div>' +
+      '<div><div class="tally-num">' + gave + '</div><div class="tally-cap">gave in</div></div>' +
+    '</div>';
+}
+
+/* ---------- entries: active habit only ---------- */
+function renderEntries() {
+  const box = document.getElementById('entries');
+  const h = activeHabit();
+  if (!h) { box.innerHTML = ''; return; }
+
+  const mine = entries.filter(e => e.habitId === h.id).slice().reverse().slice(0, 10);
+  if (mine.length === 0) {
+    box.innerHTML = '<div class="tally-empty" style="padding:20px 2px;">Nothing logged yet for this one — this is just a place to notice.</div>';
+    return;
+  }
+  box.innerHTML = mine.map(e => {
+    const t = new Date(e.time).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    const label = e.action === 'pass' ? 'Let it pass' : 'Gave in';
+    // dot is the same calm tone for both actions on purpose (no grading)
+    return '<div class="entry">' +
+             '<span class="dot"></span>' +
+             '<span class="what">' + label + '</span>' +
+             '<span class="trig">' + (e.trigger || '') + '</span>' +
+             '<span class="time">' + t + '</span>' +
+           '</div>';
+  }).join('');
+}
+
+/* ---------- toast ---------- */
+let toastTimer = null;
+function toast() {
+  const el = document.getElementById('toast');
+  document.getElementById('toastMsg').textContent = 'logged';
+  document.getElementById('undoBtn').style.display = '';   // log toast HAS undo
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 4000);  // long enough to catch a misfire
+}
+
+// plain confirmation with NO undo button — used for backup export/import,
+// where there's nothing to reverse (the file already exists / data swapped).
+function toastMsg(text) {
+  const el = document.getElementById('toast');
+  document.getElementById('toastMsg').textContent = text;
+  document.getElementById('undoBtn').style.display = 'none';
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2200);
+}
+
+/* ---------- boot ---------- */
+function renderAll() { renderHabits(); renderTally(); renderEntries(); }
+
+document.getElementById('date').textContent =
+  new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+
+// if activeId is stale (points to nothing), fall back to first habit
+if (!activeHabit() && habits.length) { activeId = habits[0].id; save(); }
+
+renderAll();
+
+// modal keyboard niceties
+document.getElementById('habitInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') confirmModal();
+  if (e.key === 'Escape') closeModal();
+});
+document.getElementById('modalOverlay').addEventListener('click', (e) => {
+  if (e.target.id === 'modalOverlay') closeModal();
+});
+
+/* ---------- PWA: register the service worker ----------
+   This is what lets the app be installed and work offline.
+   Guarded: service workers only run over https:// or localhost,
+   so opening the raw file (file://) simply skips this without error.
+   That means locally it's a normal page; once on GitHub Pages it
+   becomes installable. */
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch((err) => {
+      console.log('Service worker not registered (fine when running locally):', err);
+    });
+  });
+}
+</script>
+</body>
+</html>
