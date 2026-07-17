@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Capture</title>
+<a href="index.html">urge log</a> · <a href="capture.html">capture</a> · <a href="bank.html">bank</a>
+<style>
+  /* Same calm palette as the urge log: sage + stone, nothing alarming. */
+  :root {
+    --paper:  #f6f5f2;
+    --ink:    #2f3330;
+    --muted:  #8a908b;
+    --sage:   #7d9280;
+    --stone:  #d9d7d1;
+    --line:   #e4e2dc;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    padding: 32px 20px 64px;
+    background: var(--paper);
+    color: var(--ink);
+    font: 16px/1.55 ui-sans-serif, system-ui, -apple-system, sans-serif;
+    max-width: 34rem;
+    margin-inline: auto;
+  }
+
+  h1 {
+    font-size: 1.05rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    margin: 0 0 4px;
+  }
+
+  .hint { color: var(--muted); font-size: 0.85rem; margin: 0 0 24px; }
+
+  /* One sentence. Not a journal. The height is a hint about the expected size. */
+  textarea {
+    width: 100%;
+    min-height: 84px;
+    padding: 14px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: #fff;
+    color: inherit;
+    font: inherit;
+    resize: vertical;
+  }
+  textarea:focus { outline: 2px solid var(--sage); outline-offset: 1px; }
+
+  button {
+    margin-top: 12px;
+    padding: 12px 20px;
+    border: 1px solid var(--sage);
+    border-radius: 10px;
+    background: var(--sage);
+    color: #fff;
+    font: inherit;
+    cursor: pointer;
+  }
+  button:disabled { background: var(--stone); border-color: var(--stone); cursor: default; }
+
+  /* Confirmation is a lid closing, not a reward. Fades, says nothing exciting. */
+  .toast {
+    margin-top: 14px;
+    min-height: 1.4em;
+    font-size: 0.85rem;
+    color: var(--muted);
+    opacity: 0;
+    transition: opacity 0.25s;
+  }
+  .toast.show { opacity: 1; }
+
+  hr { border: 0; border-top: 1px solid var(--line); margin: 36px 0 20px; }
+
+  h2 { font-size: 0.8rem; font-weight: 600; color: var(--muted);
+       text-transform: uppercase; letter-spacing: 0.06em; margin: 0 0 12px; }
+
+  /* The list is an archive, not a scoreboard. No counts, no progress bars. */
+  ul { list-style: none; padding: 0; margin: 0; }
+  li { padding: 12px 0; border-bottom: 1px solid var(--line); }
+  li:last-child { border-bottom: 0; }
+  .text { display: block; }
+  .meta { display: block; margin-top: 4px; font-size: 0.78rem; color: var(--muted); }
+  .empty { color: var(--muted); font-size: 0.9rem; }
+</style>
+</head>
+<body>
+
+<h1>What did you learn?</h1>
+<p class="hint">One sentence. It comes back in 14 days, cold.</p>
+
+<textarea id="input" placeholder="e.g. localStorage only stores strings — objects need JSON.stringify"></textarea>
+<button id="save" disabled>Bank it</button>
+<div class="toast" id="toast"></div>
+
+<hr>
+
+<h2>Banked</h2>
+<ul id="list"></ul>
+
+<script>
+/* ─────────────────────────────────────────────────────────────
+   THE ONE KNOB
+   14 days: long enough that you're retrieving, not remembering.
+   Change this number later — nothing else needs to change.
+   ───────────────────────────────────────────────────────────── */
+const REATTEMPT_DAYS = 14;
+
+const KEY = 'learnings';
+
+/* ─────────────────────────────────────────────────────────────
+   STORE
+   Same pattern as the urge log: read the whole array, change it,
+   write the whole array back. localStorage only holds strings,
+   so everything goes through JSON.
+   ───────────────────────────────────────────────────────────── */
+
+function load() {
+  // A brand-new browser has nothing at this key, so fall back to an empty array.
+  return JSON.parse(localStorage.getItem(KEY) || '[]');
+}
+
+function save(items) {
+  localStorage.setItem(KEY, JSON.stringify(items));
+}
+
+/* Date math. A Date knows its own day-of-month; setDate() past the end of
+   the month rolls forward correctly, so Jan 25 + 14 becomes Feb 8 by itself. */
+function daysFromNow(n) {
+  const d = new Date();
+  d.setDate(d.getDate() + n);
+  return d;
+}
+
+/* We store dates as YYYY-MM-DD strings, not Date objects.
+   Reason: JSON has no date type. A Date would come back from storage as a
+   string anyway — so we choose the string format ourselves and stay in control.
+   This format also sorts correctly as plain text, which Session 4 will want. */
+function toDayString(date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function add(text) {
+  const items = load();
+
+  items.push({
+    id: Date.now(),                                  // unique enough for one person, one device
+    text: text,                                      // your raw sentence — untouched
+    capturedAt: toDayString(new Date()),             // when past-you wrote it. Session 5's proof.
+    reAttemptDate: toDayString(daysFromNow(REATTEMPT_DAYS)),
+    status: 'banked'                                 // Session 4 flips this to 'reattempted'
+  });
+
+  save(items);
+}
+
+/* ─────────────────────────────────────────────────────────────
+   DRAW
+   Nothing here is stored. Every count, label, and date is worked
+   out fresh from the raw array each time. That's the whole rule:
+   store facts, derive everything else at draw time.
+   ───────────────────────────────────────────────────────────── */
+
+function formatDue(dayString) {
+  // Turn a stored date into a human phrase — derived, never stored.
+  const due = new Date(dayString + 'T00:00:00');
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const days = Math.round((due - today) / 86400000); // ms in a day
+
+  if (days > 1)  return 'back in ' + days + ' days';
+  if (days === 1) return 'back tomorrow';
+  if (days === 0) return 'back today';
+  return 'due';                                      // neutral. Not "overdue", not red.
+}
+
+function draw() {
+  const list = document.getElementById('list');
+  const items = load();
+
+  list.innerHTML = '';
+
+  if (items.length === 0) {
+    list.innerHTML = '<li class="empty">Nothing banked yet. The first one comes back in two weeks.</li>';
+    return;
+  }
+
+  // Newest first — reading order, not ranking.
+  items.slice().reverse().forEach(item => {
+    const li = document.createElement('li');
+
+    const text = document.createElement('span');
+    text.className = 'text';
+    text.textContent = item.text;    // textContent, not innerHTML: your text is data, not markup
+
+    const meta = document.createElement('span');
+    meta.className = 'meta';
+    meta.textContent = item.capturedAt + ' · ' + formatDue(item.reAttemptDate);
+
+    li.append(text, meta);
+    list.appendChild(li);
+  });
+}
+
+/* ─────────────────────────────────────────────────────────────
+   WIRE IT UP
+   ───────────────────────────────────────────────────────────── */
+
+const input = document.getElementById('input');
+const button = document.getElementById('save');
+const toast = document.getElementById('toast');
+
+// Nothing to bank until there's something typed.
+input.addEventListener('input', () => {
+  button.disabled = input.value.trim() === '';
+});
+
+button.addEventListener('click', () => {
+  const text = input.value.trim();
+  if (!text) return;
+
+  add(text);          // store
+  input.value = '';   // clear
+  button.disabled = true;
+  draw();             // redraw from storage — never from the variable we just had
+
+  toast.textContent = 'Banked. Back in ' + REATTEMPT_DAYS + ' days.';
+  toast.classList.add('show');
+  setTimeout(() => toast.classList.remove('show'), 2000);
+});
+
+// Cmd/Ctrl+Enter saves — one sentence, one gesture.
+input.addEventListener('keydown', e => {
+  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') button.click();
+});
+
+draw();  // first paint
+</script>
+
+</body>
+</html>

@@ -256,27 +256,72 @@ function renderTally() {
     '</div>';
 }
 
-/* ---------- entries: active habit only ---------- */
+/* ---------- date helpers ----------
+   The entry ALREADY knows its date — `time` is a full timestamp.
+   We were just throwing the date away at draw time by only formatting
+   the hours/minutes. Nothing was ever lost; this reads what's there. */
+
+// A stable "which day is this" key, e.g. "2026-7-16".
+// Built from LOCAL date parts on purpose: using UTC would push a
+// late-night entry onto the wrong day.
+function dayKey(ts) {
+  const d = new Date(ts);
+  return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate();
+}
+
+// Turn a timestamp into a human label: Today / Yesterday / Mon, Jul 13
+function dayLabel(ts) {
+  const now  = new Date();
+  const then = new Date(ts);
+  if (dayKey(ts) === dayKey(now.getTime())) return 'Today';
+  const yest = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  if (dayKey(ts) === dayKey(yest.getTime())) return 'Yesterday';
+  return then.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+}
+
+/* ---------- entries: active habit only, grouped by day ---------- */
 function renderEntries() {
   const box = document.getElementById('entries');
   const h = activeHabit();
   if (!h) { box.innerHTML = ''; return; }
 
-  const mine = entries.filter(e => e.habitId === h.id).slice().reverse().slice(0, 10);
+  // newest first
+  const mine = entries.filter(e => e.habitId === h.id).slice().reverse();
   if (mine.length === 0) {
     box.innerHTML = '<div class="tally-empty" style="padding:20px 2px;">Nothing logged yet for this one — this is just a place to notice.</div>';
     return;
   }
-  box.innerHTML = mine.map(e => {
-    const t = new Date(e.time).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-    const label = e.action === 'pass' ? 'Let it pass' : 'Gave in';
-    // dot is the same calm tone for both actions on purpose (no grading)
-    return '<div class="entry">' +
-             '<span class="dot"></span>' +
-             '<span class="what">' + label + '</span>' +
-             '<span class="trig">' + (e.trigger || '') + '</span>' +
-             '<span class="time">' + t + '</span>' +
-           '</div>';
+
+  // Group into days, preserving newest-first order.
+  // We cap by NUMBER OF DAYS, not number of entries — a hard entry cap
+  // could show half of yesterday, which would misrepresent that day.
+  const DAYS_SHOWN = 5;
+  const groups = [];                 // [{ key, ts, items: [] }]
+  const seen = {};
+  mine.forEach(e => {
+    const k = dayKey(e.time);
+    if (!seen[k]) {
+      if (groups.length >= DAYS_SHOWN) return;   // past the day cap: skip
+      seen[k] = { key: k, ts: e.time, items: [] };
+      groups.push(seen[k]);
+    }
+    seen[k].items.push(e);
+  });
+
+  // Draw: one heading per day, then that day's rows.
+  box.innerHTML = groups.map(g => {
+    const rows = g.items.map(e => {
+      const t = new Date(e.time).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+      const label = e.action === 'pass' ? 'Let it pass' : 'Gave in';
+      // dot is the same calm tone for both actions on purpose (no grading)
+      return '<div class="entry">' +
+               '<span class="dot"></span>' +
+               '<span class="what">' + label + '</span>' +
+               '<span class="trig">' + (e.trigger || '') + '</span>' +
+               '<span class="time">' + t + '</span>' +
+             '</div>';
+    }).join('');
+    return '<div class="day-head">' + dayLabel(g.ts) + '</div>' + rows;
   }).join('');
 }
 

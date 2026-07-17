@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bank</title>
+<a href="index.html">urge log</a> · <a href="capture.html">capture</a> · <a href="bank.html">bank</a>
+<style>
+  :root {
+    --paper:  #f6f5f2;
+    --ink:    #2f3330;
+    --muted:  #8a908b;
+    --sage:   #7d9280;
+    --stone:  #d9d7d1;
+    --line:   #e4e2dc;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    padding: 32px 20px 64px;
+    background: var(--paper);
+    color: var(--ink);
+    font: 16px/1.55 ui-sans-serif, system-ui, -apple-system, sans-serif;
+    max-width: 34rem;
+    margin-inline: auto;
+  }
+
+  nav { font-size: 0.85rem; color: var(--muted); margin-bottom: 28px; }
+  nav a { color: var(--muted); }
+  nav a[aria-current] { color: var(--ink); font-weight: 600; text-decoration: none; }
+
+  h1 { font-size: 1.05rem; font-weight: 600; margin: 0 0 4px; }
+  .hint { color: var(--muted); font-size: 0.85rem; margin: 0 0 28px; }
+
+  h2 { font-size: 0.8rem; font-weight: 600; color: var(--muted);
+       text-transform: uppercase; letter-spacing: 0.06em; margin: 32px 0 12px; }
+
+  ul { list-style: none; padding: 0; margin: 0; }
+  li { padding: 14px 0; border-bottom: 1px solid var(--line); }
+  li:last-child { border-bottom: 0; }
+
+  .text { display: block; }
+  .meta { display: block; margin-top: 4px; font-size: 0.78rem; color: var(--muted); }
+
+  /* Due items get a quiet left rule — noticeable, not alarming. No red anywhere. */
+  .due { border-left: 2px solid var(--sage); padding-left: 12px; }
+
+  /* Two equal-weight choices. Neither is the "good" answer, so neither looks better. */
+  .actions { margin-top: 10px; display: flex; gap: 8px; }
+  .actions button {
+    flex: 1;
+    padding: 10px;
+    border: 1px solid var(--stone);
+    border-radius: 8px;
+    background: #fff;
+    color: var(--ink);
+    font: inherit;
+    font-size: 0.88rem;
+    cursor: pointer;
+  }
+  .actions button:hover { border-color: var(--sage); }
+
+  .empty { color: var(--muted); font-size: 0.9rem; padding: 12px 0; }
+
+  .toast {
+    margin-top: 16px; min-height: 1.4em; font-size: 0.85rem;
+    color: var(--muted); opacity: 0; transition: opacity 0.25s;
+  }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<nav>
+  <a href="index.html">urge log</a> ·
+  <a href="capture.html">capture</a> ·
+  <a href="bank.html" aria-current="page">bank</a>
+</nav>
+
+<h1>Bank</h1>
+<p class="hint">Read it. Did you already know it, or was it news again?</p>
+
+<h2>Due now</h2>
+<ul id="due"></ul>
+
+<h2>Still resting</h2>
+<ul id="resting"></ul>
+
+<h2>Archive</h2>
+<ul id="archive"></ul>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const REATTEMPT_DAYS = 14;
+const KEY = 'learnings';
+
+/* ─────────────────────────────────────────────────────────────
+   STORE — identical to capture.html. Same key, same array.
+   These two files are two windows onto one pile of data.
+   ───────────────────────────────────────────────────────────── */
+
+function load() {
+  return JSON.parse(localStorage.getItem(KEY) || '[]');
+}
+
+function save(items) {
+  localStorage.setItem(KEY, JSON.stringify(items));
+}
+
+function daysFromNow(n) {
+  const d = new Date();
+  d.setDate(d.getDate() + n);
+  return d;
+}
+
+function toDayString(date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function today() {
+  return toDayString(new Date());
+}
+
+/* ─────────────────────────────────────────────────────────────
+   THE RE-ATTEMPT
+   One honest fact, two ways it can go. We never overwrite the
+   sentence — we push a new row onto a history array. Past-you's
+   answer is evidence; evidence doesn't get edited.
+   ───────────────────────────────────────────────────────────── */
+
+function reAttempt(id, result) {
+  const items = load();
+  const item = items.find(i => i.id === id);
+  if (!item) return;
+
+  // Old rows from capture.html don't have this array yet. Create it on contact.
+  if (!item.history) item.history = [];
+
+  item.history.push({ on: today(), result: result });
+
+  if (result === 'gone') {
+    // News again. Back in the queue — not a failure, just not settled yet.
+    item.status = 'banked';
+    item.reAttemptDate = toDayString(daysFromNow(REATTEMPT_DAYS));
+  } else {
+    // Already knew it. It's landed. Out of the rotation.
+    item.status = 'archived';
+  }
+
+  save(items);
+  draw();
+
+  toast(result === 'gone'
+    ? 'Re-banked. Back in ' + REATTEMPT_DAYS + ' days.'
+    : 'Archived.');
+}
+
+/* ─────────────────────────────────────────────────────────────
+   DRAW
+   Nothing below is stored. "Due" isn't a flag on the item —
+   it's a comparison we make fresh every single time we paint.
+   Store facts. Derive the rest.
+   ───────────────────────────────────────────────────────────── */
+
+function isDue(item) {
+  // YYYY-MM-DD strings compare correctly with < and >. That's why we chose
+  // this format in capture.html — the payoff arrives here.
+  return item.status === 'banked' && item.reAttemptDate <= today();
+}
+
+function formatWait(dayString) {
+  const due = new Date(dayString + 'T00:00:00');
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+
+  const days = Math.round((due - now) / 86400000);
+
+  if (days > 1)   return 'back in ' + days + ' days';
+  if (days === 1) return 'back tomorrow';
+  return 'back today';
+}
+
+function formatHistory(item) {
+  // Derived from the history array. Not a score — a count of times
+  // it came back. "3 rounds" is a fact about the idea, not about you.
+  if (!item.history || item.history.length === 0) return '';
+  const n = item.history.length;
+  return ' · round ' + (n + 1);
+}
+
+function makeItem(item, options) {
+  const li = document.createElement('li');
+  if (options.due) li.className = 'due';
+
+  const text = document.createElement('span');
+  text.className = 'text';
+  text.textContent = item.text;
+
+  const meta = document.createElement('span');
+  meta.className = 'meta';
+  meta.textContent = options.metaText;
+
+  li.append(text, meta);
+
+  if (options.due) {
+    const actions = document.createElement('div');
+    actions.className = 'actions';
+
+    const knew = document.createElement('button');
+    knew.textContent = 'Already knew it';
+    knew.addEventListener('click', () => reAttempt(item.id, 'live'));
+
+    const news = document.createElement('button');
+    news.textContent = 'News again';
+    news.addEventListener('click', () => reAttempt(item.id, 'gone'));
+
+    actions.append(knew, news);
+    li.appendChild(actions);
+  }
+
+  return li;
+}
+
+function draw() {
+  const items = load();
+
+  const dueList     = document.getElementById('due');
+  const restingList = document.getElementById('resting');
+  const archiveList = document.getElementById('archive');
+
+  dueList.innerHTML = '';
+  restingList.innerHTML = '';
+  archiveList.innerHTML = '';
+
+  // Three piles, worked out fresh. No item "belongs" to a list in storage.
+  const due      = items.filter(isDue);
+  const resting  = items.filter(i => i.status === 'banked' && !isDue(i));
+  const archived = items.filter(i => i.status === 'archived');
+
+  if (due.length === 0) {
+    dueList.innerHTML = '<li class="empty">Nothing due. Come back when something is.</li>';
+  } else {
+    // Oldest due first — the one that's waited longest goes first.
+    due.sort((a, b) => a.reAttemptDate.localeCompare(b.reAttemptDate));
+    due.forEach(item => {
+      dueList.appendChild(makeItem(item, {
+        due: true,
+        metaText: 'banked ' + item.capturedAt + formatHistory(item)
+      }));
+    });
+  }
+
+  if (resting.length === 0) {
+    restingList.innerHTML = '<li class="empty">—</li>';
+  } else {
+    resting.sort((a, b) => a.reAttemptDate.localeCompare(b.reAttemptDate));
+    resting.forEach(item => {
+      restingList.appendChild(makeItem(item, {
+        due: false,
+        metaText: formatWait(item.reAttemptDate) + formatHistory(item)
+      }));
+    });
+  }
+
+  if (archived.length === 0) {
+    archiveList.innerHTML = '<li class="empty">—</li>';
+  } else {
+    // Most recently landed first.
+    archived.slice().reverse().forEach(item => {
+      const last = item.history[item.history.length - 1];
+      archiveList.appendChild(makeItem(item, {
+        due: false,
+        metaText: 'landed ' + last.on + ' · ' + item.history.length +
+                  (item.history.length === 1 ? ' round' : ' rounds')
+      }));
+    });
+  }
+}
+
+/* ───────────────────────────────────────────────────────────── */
+
+const toastEl = document.getElementById('toast');
+
+function toast(message) {
+  toastEl.textContent = message;
+  toastEl.classList.add('show');
+  setTimeout(() => toastEl.classList.remove('show'), 2000);
+}
+
+draw();
+</script>
+
+</body>
+</html>

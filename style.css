@@ -87,6 +87,13 @@ header { margin-bottom: 24px; }
 .tally-cap { font-size: 12px; color: var(--muted); }
 .tally-empty { font-size: 14px; color: var(--muted); font-style: italic; }
 
+/* day head: Tell which day the urges arise*/
+.day-head {
+  font-size: 12px; color: var(--muted);
+  margin: 18px 0 2px; letter-spacing: 0.3px;
+}
+.day-head:first-child { margin-top: 6px; }
+
 /* ---- entries: active habit only. Dots are the SAME calm tone on
        purpose — a green/grey split would quietly grade you. ---- */
 .entries { margin-top: 8px; }
